@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mesero - El Kiosko</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <style>
+    body { background-color: #121212; color: #FFFFFF; font-family: system-ui, -apple-system, sans-serif; }
+    .bg-kiosko-red { background-color: #D32F2F; }
+    .text-kiosko-red { color: #D32F2F; }
+  </style>
+</head>
+<body class="p-4 max-w-lg mx-auto pb-24">
+
+  <!-- HEADER -->
+  <header class="flex justify-between items-center border-b border-zinc-800 pb-3 mb-4">
+    <h1 class="text-xl font-black text-white">EL KIOSKO <span class="text-kiosko-red text-xs block">Comandero Mesero</span></h1>
+    <button onclick="crearMesa()" class="bg-kiosko-red text-white text-xs font-bold px-3 py-2 rounded-xl">+ Nueva Mesa</button>
+  </header>
+
+  <!-- LISTA DE MESAS -->
+  <section class="mb-6">
+    <h2 class="text-xs font-bold text-gray-400 uppercase mb-2">Selecciona una Mesa</h2>
+    <div id="grid-mesas" class="grid grid-cols-3 gap-2">
+      <!-- Mesas dinámicas -->
+    </div>
+  </section>
+
+  <!-- PANEL DE TOMA DE COMANDA (OCULTO POR DEFECTO) -->
+  <section id="panel-comanda" class="hidden bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-4">
+    <div class="flex justify-between items-center border-b border-zinc-800 pb-2">
+      <div>
+        <h3 id="lbl-mesa-activa" class="font-bold text-white text-lg">Mesa Selected</h3>
+        <p class="text-xs text-gray-400">Agrega productos a la comanda</p>
+      </div>
+      <div class="flex space-x-2">
+        <button onclick="renombrarMesaActiva()" class="text-xs bg-zinc-800 p-2 rounded text-gray-300">✏️</button>
+        <button onclick="eliminarMesaActiva()" class="text-xs bg-zinc-800 p-2 rounded text-red-400">🗑️</button>
+      </div>
+    </div>
+
+    <!-- BÚSQUEDA / FILTRO -->
+    <div id="catalogo-productos" class="space-y-3 max-h-60 overflow-y-auto pr-1">
+      <!-- Se carga el menú completo desde Firebase -->
+    </div>
+
+    <!-- RESUMEN DE PEDIDO DE MESA -->
+    <div class="border-t border-zinc-800 pt-3 space-y-2">
+      <h4 class="font-bold text-sm text-gray-300">Items en Comanda:</h4>
+      <div id="lista-items-comanda" class="space-y-2 text-xs"></div>
+      <textarea id="nota-comanda" placeholder="Notas especiales (ej. Sancocho sin yuca, consomé muy caliente...)" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-xs text-white outline-none h-14"></textarea>
+      
+      <button onclick="enviarComandaCocinaYCaja()" class="w-full bg-kiosko-red text-white py-3 rounded-xl font-bold text-sm shadow-lg">🚀 Enviar a Cocina y Caja</button>
+    </div>
+  </section>
+
+  <script>
+    const firebaseConfig = { databaseURL: "https://el-kiosko-d6a07-default-rtdb.firebaseio.com/" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let mesaSeleccionada = null;
+    let comandaActual = [];
+
+    // Cargar Mesas y Productos
+    db.ref('mesas').on('value', snap => renderizarMesas(snap.val() || {}));
+    db.ref('menu/productos').on('value', snap => renderizarCatalogo(snap.val() || {}));
+
+    function crearMesa() {
+      const nombre = prompt('Nombre o número de la nueva mesa:');
+      if (nombre) {
+        const id = 'mesa_' + Date.now();
+        db.ref('mesas/' + id).set({ nombre: nombre, estado: 'libre' });
+      }
+    }
+
+    function renderizarMesas(mesas) {
+      const cont = document.getElementById('grid-mesas');
+      cont.innerHTML = '';
+      Object.keys(mesas).forEach(k => {
+        const m = mesas[k];
+        cont.innerHTML += `
+          <button onclick="seleccionarMesa('${k}', '${m.nombre}')" class="p-3 bg-zinc-900 border ${mesaSeleccionada === k ? 'border-kiosko-red bg-zinc-800' : 'border-zinc-800'} rounded-xl text-center">
+            <span class="block text-2xl">🍽️</span>
+            <span class="text-xs font-bold text-white block mt-1">${m.nombre}</span>
+          </button>
+        `;
+      });
+    }
+
+    function seleccionarMesa(id, nombre) {
+      mesaSeleccionada = id;
+      document.getElementById('lbl-mesa-activa').innerText = nombre;
+      document.getElementById('panel-comanda').classList.remove('hidden');
+      comandaActual = [];
+      actualizarComandaUI();
+    }
+
+    function renderizarCatalogo(productos) {
+      const cont = document.getElementById('catalogo-productos');
+      cont.innerHTML = '';
+      Object.keys(productos).forEach(k => {
+        const p = productos[k];
+        cont.innerHTML += `
+          <div class="flex justify-between items-center bg-zinc-800 p-2.5 rounded-xl">
+            <div>
+              <p class="font-bold text-white text-xs">${p.nombre}</p>
+              <p class="text-[10px] text-kiosko-red font-bold">$${p.precio_base.toLocaleString()}</p>
+            </div>
+            <button onclick="agregarAComanda('${p.nombre}', ${p.precio_base})" class="bg-kiosko-red text-white text-xs font-bold px-2.5 py-1 rounded-lg">+ Añadir</button>
+          </div>
+        `;
+      });
+    }
+
+    function agregarAComanda(nombre, precio) {
+      comandaActual.push({ nombre, precio });
+      actualizarComandaUI();
+    }
+
+    function actualizarComandaUI() {
+      const cont = document.getElementById('lista-items-comanda');
+      cont.innerHTML = '';
+      comandaActual.forEach((item, index) => {
+        cont.innerHTML += `
+          <div class="flex justify-between items-center bg-zinc-800/50 p-2 rounded border border-zinc-700">
+            <span>${item.nombre} - $${item.precio.toLocaleString()}</span>
+            <button onclick="eliminarItemComanda(${index})" class="text-red-400 font-bold">✕</button>
+          </div>
+        `;
+      });
+    }
+
+    function eliminarItemComanda(index) {
+      comandaActual.splice(index, 1);
+      actualizarComandaUI();
+    }
+
+    function enviarComandaCocinaYCaja() {
+      if (!mesaSeleccionada || comandaActual.length === 0) {
+        alert('Selecciona productos para la comanda.');
+        return;
+      }
+
+      const nota = document.getElementById('nota-comanda').value.trim();
+      const mesaNombre = document.getElementById('lbl-mesa-activa').innerText;
+      const total = comandaActual.reduce((a, b) => a + b.precio, 0);
+
+      const comandaData = {
+        origen: mesaNombre,
+        hora: new Date().toLocaleTimeString("es-CO", { hour: '2-digit', minute: '2-digit' }),
+        items: comandaActual,
+        nota_general: nota || 'Sin notas',
+        estado: 'en_preparacion'
+      };
+
+      // 1. Enviar a Cocina
+      db.ref('comandas_cocina/COM-' + Date.now()).set(comandaData);
+
+      alert('¡Comanda enviada a Cocina!');
+      comandaActual = [];
+      document.getElementById('nota-comanda').value = '';
+      actualizarComandaUI();
+    }
+
+    function renombrarMesaActiva() {
+      if (!mesaSeleccionada) return;
+      const nuevo = prompt('Nuevo nombre para la mesa:');
+      if (nuevo) db.ref('mesas/' + mesaSeleccionada).update({ nombre: nuevo });
+    }
+
+    function eliminarMesaActiva() {
+      if (!mesaSeleccionada) return;
+      if (confirm('¿Eliminar esta mesa?')) {
+        db.ref('mesas/' + mesaSeleccionada).remove();
+        document.getElementById('panel-comanda').classList.add('hidden');
+      }
+    }
+  </script>
+</body>
+</html>

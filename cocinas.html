@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cocina KDS - El Kiosko</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <style>
+    body { background-color: #121212; color: #FFFFFF; font-family: system-ui, -apple-system, sans-serif; }
+    .bg-kiosko-red { background-color: #D32F2F; }
+    .text-kiosko-red { color: #D32F2F; }
+  </style>
+</head>
+<body class="p-4">
+
+  <!-- HEADER COCINA -->
+  <header class="bg-zinc-900 border-b border-zinc-800 p-4 rounded-xl flex justify-between items-center mb-6">
+    <div class="flex items-center space-x-3">
+      <span class="text-2xl">🔥</span>
+      <h1 class="text-xl font-black text-white">PANEL DE COCINA <span class="text-kiosko-red text-xs block">El Kiosko - Delicias al Barril</span></h1>
+    </div>
+    <span id="cant-comandas" class="bg-kiosko-red text-white text-xs font-bold px-3 py-1 rounded-full">0 Ordenes</span>
+  </header>
+
+  <!-- CONTENEDOR DE COMANDAS -->
+  <main id="grid-comandas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <!-- Tarjetas de comandas en tiempo real -->
+  </main>
+
+  <script>
+    const firebaseConfig = { databaseURL: "https://el-kiosko-d6a07-default-rtdb.firebaseio.com/" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    db.ref('comandas_cocina').on('value', (snapshot) => {
+      const comandas = snapshot.val() || {};
+      renderizarComandas(comandas);
+    });
+
+    function renderizarComandas(comandas) {
+      const cont = document.getElementById('grid-comandas');
+      cont.innerHTML = '';
+      const keys = Object.keys(comandas);
+      document.getElementById('cant-comandas').innerText = `${keys.length} Órdenes`;
+
+      if (keys.length === 0) {
+        cont.innerHTML = `<div class="col-span-full text-center py-12 text-gray-500 font-bold"> Sin comandas pendientes en cocina</div>`;
+        return;
+      }
+
+      keys.forEach(k => {
+        const c = comandas[k];
+        const esListo = c.estado === 'listo';
+
+        let itemsHtml = c.items.map(i => `<li class="font-bold text-base text-white">• ${i.nombre}</li>`).join('');
+
+        cont.innerHTML += `
+          <div class="bg-zinc-900 border-2 ${esListo ? 'border-green-500' : 'border-kiosko-red'} rounded-2xl p-4 space-y-3 flex flex-col justify-between shadow-2xl">
+            <div>
+              <div class="flex justify-between items-start border-b border-zinc-800 pb-2">
+                <div>
+                  <span class="text-xs font-extrabold uppercase bg-zinc-800 text-gray-300 px-2 py-1 rounded">${c.origen}</span>
+                  <p class="text-xs text-gray-400 mt-1">Hora: ${c.hora}</p>
+                </div>
+                <span class="text-xs font-bold ${esListo ? 'text-green-400 bg-green-950' : 'text-red-400 bg-red-950'} px-2 py-1 rounded uppercase">${c.estado}</span>
+              </div>
+
+              <!-- DETALLE PLATOS -->
+              <ul class="my-3 space-y-1">
+                ${itemsHtml}
+              </ul>
+
+              ${c.nota_general ? `<div class="bg-zinc-800 border-l-4 border-yellow-500 p-2 text-xs text-yellow-300 font-medium">Nota: ${c.nota_general}</div>` : ''}
+            </div>
+
+            <!-- BOTONES DE ESTADO -->
+            <div class="pt-2">
+              ${!esListo ? `
+                <button onclick="marcarListo('${k}')" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl text-sm">¡MARCAR LISTO!</button>
+              ` : `
+                <button onclick="despacharComanda('${k}')" class="w-full bg-zinc-800 hover:bg-zinc-700 text-gray-300 font-bold py-3 rounded-xl text-sm">🗑️ DESPACHAR / BORRAR</button>
+              `}
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    function marcarListo(id) {
+      db.ref('comandas_cocina/' + id).update({ estado: 'listo' });
+    }
+
+    function despacharComanda(id) {
+      db.ref('comandas_cocina/' + id).remove();
+    }
+  </script>
+</body>
+</html>

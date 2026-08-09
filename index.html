@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>El Kiosko - Delicias al Barril</title>
+  <!-- Tailwind CSS CDN para estilos ultraligeros -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase App & Realtime Database SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <style>
+    body { background-color: #121212; color: #FFFFFF; font-family: system-ui, -apple-system, sans-serif; }
+    .bg-kiosko-red { background-color: #D32F2F; }
+    .border-kiosko-red { border-color: #D32F2F; }
+    .text-kiosko-red { color: #D32F2F; }
+    .modal-backdrop { background-color: rgba(0, 0, 0, 0.85); }
+  </style>
+</head>
+<body class="pb-28">
+
+  <!-- APP DESACTIVADA / CERRADO OVERLAY -->
+  <div id="cerrado-overlay" class="hidden fixed inset-0 bg-black z-50 flex flex-col items-center justify-center p-6 text-center">
+    <div class="text-6xl mb-4">🔥</div>
+    <h1 class="text-3xl font-bold text-kiosko-red mb-2">El Kiosko - Delicias al Barril</h1>
+    <p class="text-gray-300 text-lg">Actualmente nos encontramos cerrados.</p>
+    <p class="text-sm text-gray-500 mt-2">Atendemos los fines de semana. ¡Te esperamos pronto!</p>
+  </div>
+
+  <!-- HEADER / BANNER VISUAL -->
+  <header class="relative w-full h-64 overflow-hidden border-b-4 border-kiosko-red">
+    <img src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=1000&q=80" 
+         alt="Carnes al barril" class="w-full h-full object-cover brightness-50">
+    <div class="absolute inset-0 flex flex-col justify-end p-5 bg-gradient-to-t from-black via-transparent to-transparent">
+      <span class="bg-kiosko-red text-white text-xs px-2 py-1 rounded font-bold uppercase tracking-wider w-max mb-1">Delicias al Barril</span>
+      <h1 class="text-3xl font-extrabold text-white">El Kiosko</h1>
+      <p class="text-sm text-gray-300">El aut&eacute;ntico sabor del barril directo a tu mesa.</p>
+    </div>
+  </header>
+
+  <!-- MENÚ PRINCIPAL -->
+  <main class="max-w-2xl mx-auto p-4 space-y-6">
+    
+    <!-- CATEGORÍA: CARNE AL BARRIL ESPECIAL -->
+    <section>
+      <h2 class="text-xl font-bold border-l-4 border-kiosko-red pl-3 mb-4">Especialidad de la Casa</h2>
+      
+      <div onclick="abrirModalCarne()" class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex justify-between items-center cursor-pointer hover:border-kiosko-red transition">
+        <div class="space-y-1">
+          <h3 class="font-bold text-lg text-white">Carne al Barril (Personalizable)</h3>
+          <p class="text-xs text-gray-400">Escoge tu prote&iacute;na (Res, Cerdo o Mixta) y el tama&ntilde;o preferido.</p>
+          <span class="text-kiosko-red font-extrabold text-sm block">Desde $35.000</span>
+        </div>
+        <button class="bg-kiosko-red text-white font-bold text-2xl w-10 h-10 rounded-full flex items-center justify-center shadow-lg">+</button>
+      </div>
+    </section>
+
+    <!-- CATEGORÍA: BEBIDAS -->
+    <section>
+      <h2 class="text-xl font-bold border-l-4 border-kiosko-red pl-3 mb-4">Bebidas</h2>
+      
+      <div onclick="abrirModalBebidas()" class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex justify-between items-center cursor-pointer hover:border-kiosko-red transition">
+        <div class="flex items-center space-x-4">
+          <img src="https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=200&q=80" class="w-16 h-16 object-cover rounded-lg" alt="Bebidas">
+          <div>
+            <h3 class="font-bold text-lg text-white">Seleccionar Bebidas</h3>
+            <p class="text-xs text-gray-400">Gaseosas, cervezas y refrescos fr&iacute;os.</p>
+          </div>
+        </div>
+        <span class="text-xs bg-zinc-800 text-gray-300 px-3 py-2 rounded-lg font-bold">Ver opc.</span>
+      </div>
+    </section>
+
+    <!-- LISTA DE OTROS PRODUCTOS REGISTRADOS DESDE EL POS -->
+    <section>
+      <h2 class="text-xl font-bold border-l-4 border-kiosko-red pl-3 mb-4">Men&uacute; General</h2>
+      <div id="lista-productos-pos" class="space-y-3">
+        <!-- Se cargan dinámicamente desde Firebase -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- BARRA FLOTANTE DE CARRITO -->
+  <div id="barra-carrito" class="fixed bottom-0 inset-x-0 bg-zinc-900 border-t border-zinc-800 p-4 flex justify-between items-center shadow-2xl max-w-2xl mx-auto z-30 hidden">
+    <div>
+      <span id="cant-items-carrito" class="text-xs text-gray-400">0 productos</span>
+      <div id="total-carrito" class="text-xl font-extrabold text-kiosko-red">$0</div>
+    </div>
+    <button onclick="abrirModalCarrito()" class="bg-kiosko-red text-white font-bold px-6 py-3 rounded-xl hover:opacity-90">Ver Pedido</button>
+  </div>
+
+  <!-- MODAL: CARNE AL BARRIL -->
+  <div id="modal-carne" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-4">
+      <h3 class="text-xl font-bold text-white border-b border-zinc-800 pb-2">Arma tu Carne al Barril</h3>
+      
+      <div>
+        <label class="block text-xs font-bold text-gray-400 uppercase mb-2">1. Selecciona la Prote&iacute;na</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" onclick="seleccionarOpcion('proteina', 'Res', this)" class="opt-prot bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">Res</button>
+          <button type="button" onclick="seleccionarOpcion('proteina', 'Cerdo', this)" class="opt-prot bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">Cerdo</button>
+          <button type="button" onclick="seleccionarOpcion('proteina', 'Mixta', this)" class="opt-prot bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">Mixta</button>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-gray-400 uppercase mb-2">2. Selecciona el Tama&ntilde;o / Precio</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" onclick="seleccionarOpcion('precio', 35000, this)" class="opt-precio bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">$35.000</button>
+          <button type="button" onclick="seleccionarOpcion('precio', 50000, this)" class="opt-precio bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">$50.000</button>
+          <button type="button" onclick="seleccionarOpcion('precio', 60000, this)" class="opt-precio bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">$60.000</button>
+        </div>
+      </div>
+
+      <div class="flex space-x-2 pt-2">
+        <button onclick="cerrarModal('modal-carne')" class="w-1/2 bg-zinc-800 text-gray-300 py-3 rounded-xl font-bold">Cancelar</button>
+        <button onclick="agregarCarneAlCarrito()" class="w-1/2 bg-kiosko-red text-white py-3 rounded-xl font-bold">Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: BEBIDAS -->
+  <div id="modal-bebidas" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-4 max-h-[80vh] flex flex-col">
+      <h3 class="text-xl font-bold text-white border-b border-zinc-800 pb-2">Seleccionar Bebidas</h3>
+      <div id="lista-bebidas-modal" class="space-y-3 overflow-y-auto flex-1">
+        <!-- Bebidas dinámicas -->
+      </div>
+      <button onclick="cerrarModal('modal-bebidas')" class="w-full bg-zinc-800 text-gray-300 py-3 rounded-xl font-bold">Cerrar</button>
+    </div>
+  </div>
+
+  <!-- MODAL: CARRITO Y CHECKOUT -->
+  <div id="modal-carrito" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <h3 class="text-xl font-bold text-white border-b border-zinc-800 pb-2">Resumen de tu Pedido</h3>
+      
+      <!-- Detalle de Productos -->
+      <div id="items-carrito-lista" class="space-y-2 text-sm divide-y divide-zinc-800"></div>
+
+      <!-- Tipo de Entrega -->
+      <div class="pt-2">
+        <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Tipo de Entrega</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" onclick="setTipoEntrega('domicilio', this)" class="btn-entrega bg-kiosko-red border border-kiosko-red p-2 rounded-lg text-sm text-center font-semibold">Domicilio (+$4.000)</button>
+          <button type="button" onclick="setTipoEntrega('recoger', this)" class="btn-entrega bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">Recoger en Local (+$2.000/empaque)</button>
+        </div>
+      </div>
+
+      <!-- Formulario Cliente -->
+      <div class="space-y-3 pt-2">
+        <input type="text" id="cli-nombre" placeholder="Nombre completo *" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-sm text-white outline-none focus:border-kiosko-red">
+        <input type="tel" id="cli-whatsapp" placeholder="Tu número de WhatsApp *" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-sm text-white outline-none focus:border-kiosko-red">
+        
+        <div id="sec-direccion" class="space-y-2">
+          <input type="text" id="cli-direccion" placeholder="Dirección de entrega *" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-sm text-white outline-none focus:border-kiosko-red">
+          <input type="text" id="cli-referencia" placeholder="Dato adicional (Barrio, Apto, Casa...)" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-sm text-white outline-none focus:border-kiosko-red">
+        </div>
+
+        <textarea id="cli-nota" placeholder="Nota sobre tu pedido (ej. Sin salsa, carne bien asada...)" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-sm text-white outline-none focus:border-kiosko-red h-16"></textarea>
+
+        <!-- Método de Pago -->
+        <div>
+          <label class="block text-xs font-bold text-gray-400 uppercase mb-2">M&eacute;todo de Pago</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="setMetodoPago('Efectivo', this)" class="btn-pago bg-kiosko-red border border-kiosko-red p-2 rounded-lg text-sm text-center font-semibold">Efectivo</button>
+            <button type="button" onclick="setMetodoPago('Nequi', this)" class="btn-pago bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">Nequi / Transferencia</button>
+          </div>
+        </div>
+
+        <div id="sec-vueltas" class="pt-1">
+          <input type="number" id="cli-paga-con" placeholder="¿Con cuánto vas a pagar? (Para vueltas)" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-sm text-white outline-none focus:border-kiosko-red">
+        </div>
+      </div>
+
+      <!-- Resumen de Costos final -->
+      <div class="border-t border-zinc-800 pt-3 space-y-1 text-sm">
+        <div class="flex justify-between text-gray-400"><span>Subtotal productos:</span><span id="res-subtotal">$0</span></div>
+        <div class="flex justify-between text-gray-400"><span id="lbl-recargo">Domicilio:</span><span id="res-recargo">$4.000</span></div>
+        <div class="flex justify-between text-lg font-bold text-white pt-1"><span>Total a Pagar:</span><span id="res-total" class="text-kiosko-red">$0</span></div>
+      </div>
+
+      <!-- Botones de Acción -->
+      <div class="flex space-x-2 pt-2">
+        <button onclick="cerrarModal('modal-carrito')" class="w-1/3 bg-zinc-800 text-gray-300 py-3 rounded-xl font-bold">Volver</button>
+        <button id="btn-enviar-pedido" onclick="procesarPedidoWhatsApp()" class="w-2/3 bg-kiosko-red text-white py-3 rounded-xl font-bold flex items-center justify-center space-x-2">
+          <span>Confirmar por WhatsApp</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 1. CONFIGURACIÓN E INICIALIZACIÓN DE FIREBASE
+    const firebaseConfig = {
+      databaseURL: "https://el-kiosko-d6a07-default-rtdb.firebaseio.com/"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // Estado Local de la App
+    let carrito = [];
+    let seleccionCarneTemp = { proteina: null, precio: null };
+    let tipoEntrega = 'domicilio'; // 'domicilio' o 'recoger'
+    let metodoPago = 'Efectivo';
+    let configApp = { whatsapp: '573505812300', activa: true };
+
+    // 2. SINCRONIZACIÓN EN TIEMPO REAL CON FIREBASE
+    db.ref('configuracion').on('value', (snapshot) => {
+      const val = snapshot.val();
+      if (val) {
+        configApp = val;
+        if (val.cliente_app_activa === false) {
+          document.getElementById('cerrado-overlay').classList.remove('hidden');
+        } else {
+          document.getElementById('cerrado-overlay').classList.add('hidden');
+        }
+      }
+    });
+
+    db.ref('menu/productos').on('value', (snapshot) => {
+      const productos = snapshot.val() || {};
+      renderizarProductosPOS(productos);
+      renderizarBebidasModal(productos);
+    });
+
+    // 3. SELECCIÓN DE CARNE AL BARRIL
+    function abrirModalCarne() {
+      seleccionCarneTemp = { proteina: null, precio: null };
+      document.querySelectorAll('.opt-prot, .opt-precio').forEach(b => {
+        b.classList.remove('bg-kiosko-red', 'border-kiosko-red');
+        b.classList.add('bg-zinc-800', 'border-zinc-700');
+      });
+      document.getElementById('modal-carne').classList.remove('hidden');
+    }
+
+    function seleccionarOpcion(tipo, valor, el) {
+      if (tipo === 'proteina') {
+        seleccionCarneTemp.proteina = valor;
+        document.querySelectorAll('.opt-prot').forEach(b => b.classList.replace('bg-kiosko-red', 'bg-zinc-800'));
+      } else {
+        seleccionCarneTemp.precio = valor;
+        document.querySelectorAll('.opt-precio').forEach(b => b.classList.replace('bg-kiosko-red', 'bg-zinc-800'));
+      }
+      el.classList.replace('bg-zinc-800', 'bg-kiosko-red');
+    }
+
+    function agregarCarneAlCarrito() {
+      if (!seleccionCarneTemp.proteina || !seleccionCarneTemp.precio) {
+        alert('Por favor selecciona el tipo de carne y el precio/tamaño.');
+        return;
+      }
+      
+      const item = {
+        id: 'carne_' + Date.now(),
+        nombre: `Carne al Barril (${seleccionCarneTemp.proteina})`,
+        precio: seleccionCarneTemp.precio,
+        cantidad: 1,
+        esBebida: false,
+        variacion: seleccionCarneTemp.proteina
+      };
+      
+      carrito.push(item);
+      cerrarModal('modal-carne');
+      actualizarCarritoUI();
+    }
+
+    // 4. BEBIDAS Y PRODUCTOS POS
+    function abrirModalBebidas() {
+      document.getElementById('modal-bebidas').classList.remove('hidden');
+    }
+
+    function renderizarBebidasModal(productos) {
+      const cont = document.getElementById('lista-bebidas-modal');
+      cont.innerHTML = '';
+      
+      Object.keys(productos).forEach(key => {
+        const p = productos[key];
+        if (p.es_bebida) {
+          cont.innerHTML += `
+            <div class="flex justify-between items-center bg-zinc-800 p-3 rounded-xl">
+              <div>
+                <p class="font-bold text-white text-sm">${p.nombre}</p>
+                <p class="text-xs text-kiosko-red font-bold">$${p.precio_base.toLocaleString()}</p>
+              </div>
+              <button onclick="agregarProductoGenerico('${p.nombre}', ${p.precio_base}, true)" class="bg-kiosko-red text-white font-bold px-3 py-1 rounded-lg text-sm">+ Agregar</button>
+            </div>
+          `;
+        }
+      });
+    }
+
+    function renderizarProductosPOS(productos) {
+      const cont = document.getElementById('lista-productos-pos');
+      cont.innerHTML = '';
+      
+      Object.keys(productos).forEach(key => {
+        const p = productos[key];
+        if (!p.es_bebida && !p.es_carne_barril) {
+          cont.innerHTML += `
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex justify-between items-center">
+              <div>
+                <h4 class="font-bold text-white">${p.nombre}</h4>
+                <p class="text-xs text-gray-400">${p.descripcion || ''}</p>
+                <span class="text-kiosko-red font-bold text-sm">$${p.precio_base.toLocaleString()}</span>
+              </div>
+              <button onclick="agregarProductoGenerico('${p.nombre}', ${p.precio_base}, false)" class="bg-kiosko-red text-white font-bold px-3 py-2 rounded-lg text-xs">+ Agregar</button>
+            </div>
+          `;
+        }
+      });
+    }
+
+    function agregarProductoGenerico(nombre, precio, esBebida) {
+      const item = {
+        id: 'prod_' + Date.now(),
+        nombre: nombre,
+        precio: precio,
+        cantidad: 1,
+        esBebida: esBebida
+      };
+      carrito.push(item);
+      actualizarCarritoUI();
+    }
+
+    // 5. CÁLCULOS Y UI DEL CARRITO
+    function actualizarCarritoUI() {
+      const barra = document.getElementById('barra-carrito');
+      if (carrito.length === 0) {
+        barra.classList.add('hidden');
+        return;
+      }
+      barra.classList.remove('hidden');
+
+      let cant = carrito.length;
+      let subtotal = carrito.reduce((acc, i) => acc + i.precio, 0);
+
+      document.getElementById('cant-items-carrito').innerText = `${cant} producto(s)`;
+      document.getElementById('total-carrito').innerText = `$${subtotal.toLocaleString()}`;
+    }
+
+    function setTipoEntrega(tipo, el) {
+      tipoEntrega = tipo;
+      document.querySelectorAll('.btn-entrega').forEach(b => b.classList.replace('bg-kiosko-red', 'bg-zinc-800'));
+      el.classList.replace('bg-zinc-800', 'bg-kiosko-red');
+
+      if (tipo === 'domicilio') {
+        document.getElementById('sec-direccion').classList.remove('hidden');
+      } else {
+        document.getElementById('sec-direccion').classList.add('hidden');
+      }
+      calcularTotalesCheckout();
+    }
+
+    function setMetodoPago(metodo, el) {
+      metodoPago = metodo;
+      document.querySelectorAll('.btn-pago').forEach(b => b.classList.replace('bg-kiosko-red', 'bg-zinc-800'));
+      el.classList.replace('bg-zinc-800', 'bg-kiosko-red');
+
+      if (metodo === 'Efectivo') {
+        document.getElementById('sec-vueltas').classList.remove('hidden');
+      } else {
+        document.getElementById('sec-vueltas').classList.add('hidden');
+      }
+    }
+
+    function abrirModalCarrito() {
+      const lista = document.getElementById('items-carrito-lista');
+      lista.innerHTML = '';
+
+      carrito.forEach((item, index) => {
+        lista.innerHTML += `
+          <div class="flex justify-between items-center py-2">
+            <div>
+              <p class="font-bold text-white">${item.nombre}</p>
+              <p class="text-xs text-kiosko-red font-bold">$${item.precio.toLocaleString()}</p>
+            </div>
+            <button onclick="eliminarDelCarrito(${index})" class="text-xs text-red-500 font-bold bg-zinc-800 px-2 py-1 rounded">Eliminar</button>
+          </div>
+        `;
+      });
+
+      calcularTotalesCheckout();
+      document.getElementById('modal-carrito').classList.remove('hidden');
+    }
+
+    function eliminarDelCarrito(index) {
+      carrito.splice(index, 1);
+      if (carrito.length === 0) {
+        cerrarModal('modal-carrito');
+      } else {
+        abrirModalCarrito();
+      }
+      actualizarCarritoUI();
+    }
+
+    function calcularTotalesCheckout() {
+      let subtotal = carrito.reduce((acc, i) => acc + i.precio, 0);
+      let recargo = 0;
+
+      if (tipoEntrega === 'domicilio') {
+        recargo = 4000;
+        document.getElementById('lbl-recargo').innerText = "Costo Domicilio:";
+      } else {
+        recargo = carrito.length * 2000; // $2.000 por empaque por unidad
+        document.getElementById('lbl-recargo').innerText = `Empaque (${carrito.length} prod):`;
+      }
+
+      let total = subtotal + recargo;
+
+      document.getElementById('res-subtotal').innerText = `$${subtotal.toLocaleString()}`;
+      document.getElementById('res-recargo').innerText = `$${recargo.toLocaleString()}`;
+      document.getElementById('res-total').innerText = `$${total.toLocaleString()}`;
+
+      return { subtotal, recargo, total };
+    }
+
+    // 6. PROCESAMIENTO Y REDIRECCIÓN A WHATSAPP (CON DELAY PARA SINCRONIZACIÓN)
+    function procesarPedidoWhatsApp() {
+      const nombre = document.getElementById('cli-nombre').value.trim();
+      const whatsappCli = document.getElementById('cli-whatsapp').value.trim();
+      const direccion = document.getElementById('cli-direccion').value.trim();
+      const referencia = document.getElementById('cli-referencia').value.trim();
+      const nota = document.getElementById('cli-nota').value.trim();
+      const pagaCon = document.getElementById('cli-paga-con').value.trim();
+
+      if (!nombre || !whatsappCli) {
+        alert('Por favor ingresa tu Nombre y WhatsApp.');
+        return;
+      }
+
+      if (tipoEntrega === 'domicilio' && !direccion) {
+        alert('Por favor ingresa la dirección de entrega.');
+        return;
+      }
+
+      const { subtotal, recargo, total } = calcularTotalesCheckout();
+      const btn = document.getElementById('btn-enviar-pedido');
+      btn.disabled = true;
+      btn.innerHTML = `<span>Enviando pedido...</span>`;
+
+      const idPedido = 'PED-' + Date.now().toString().slice(-6);
+
+      // Objeto Pedido para Firebase / POS
+      const datosPedido = {
+        id: idPedido,
+        origen: 'WEB',
+        fecha_hora: new Date().toLocaleString("es-CO"),
+        cliente: {
+          nombre,
+          whatsapp: whatsappCli,
+          tipo_entrega: tipoEntrega,
+          direccion: tipoEntrega === 'domicilio' ? direccion : 'Recoge en Local',
+          referencia: referencia || 'N/A',
+          metodo_pago: metodoPago,
+          paga_con: pagaCon || 'Justo'
+        },
+        items: carrito,
+        costo_recargo: recargo,
+        total: total,
+        nota: nota || 'Sin observaciones',
+        estado: 'pendiente_aprobacion'
+      };
+
+      // 1. IMPACTAR FIREBASE PRIMERO
+      db.ref('pedidos_pendientes_pos/' + idPedido).set(datosPedido, (error) => {
+        if (error) {
+          alert('Ocurrió un error al conectar con el servidor. Intenta de nuevo.');
+          btn.disabled = false;
+          btn.innerHTML = `<span>Confirmar por WhatsApp</span>`;
+          return;
+        }
+
+        // 2. DELAY TÉCNICO DE 1.8 SEGUNDOS Y REDIRECCIÓN A WHATSAPP
+        setTimeout(() => {
+          let msg = `🔥 *NUEVO PEDIDO - EL KIOSKO* 🔥\n`;
+          msg += `*Pedido #:* ${idPedido}\n`;
+          msg += `----------------------------------\n`;
+          msg += `👤 *Cliente:* ${nombre}\n`;
+          msg += `📱 *WhatsApp:* ${whatsappCli}\n`;
+          msg += `📍 *Entrega:* ${tipoEntrega === 'domicilio' ? 'A Domicilio' : 'Recoger en Local'}\n`;
+          if (tipoEntrega === 'domicilio') {
+            msg += `🏠 *Dirección:* ${direccion} (${referencia})\n`;
+          }
+          msg += `----------------------------------\n`;
+          msg += `🛒 *DETALLE DEL PEDIDO:*\n`;
+          
+          carrito.forEach(i => {
+            msg += `• ${i.nombre} - $${i.precio.toLocaleString()}\n`;
+          });
+
+          msg += `----------------------------------\n`;
+          msg += `*Subtotal:* $${subtotal.toLocaleString()}\n`;
+          msg += `*${tipoEntrega === 'domicilio' ? 'Domicilio' : 'Empaque'}:* $${recargo.toLocaleString()}\n`;
+          msg += `💰 *TOTAL A PAGAR:* $${total.toLocaleString()}\n`;
+          msg += `----------------------------------\n`;
+          msg += `💳 *Método de Pago:* ${metodoPago}\n`;
+
+          if (metodoPago === 'Efectivo' && pagaCon) {
+            msg += `💵 *Cancela con:* $${parseInt(pagaCon).toLocaleString()} (Vueltas: $${(parseInt(pagaCon) - total).toLocaleString()})\n`;
+          }
+
+          if (nota) msg += `📝 *Nota:* ${nota}\n`;
+
+          msg += `----------------------------------\n`;
+
+          if (metodoPago === 'Nequi') {
+            msg += `\n📌 *INSTRUCCIONES DE PAGO NEQUI:*\n`;
+            msg += `Por favor realiza la transferencia de *$${total.toLocaleString()}* al Nequi:\n`;
+            msg += `📲 *3208013658* (Luc... Ceb...)\n`;
+            msg += `y adjunta el comprobante de pago en este chat.\n\n`;
+          }
+
+          msg += `¡Muchas gracias por preferir a El Kiosko! 🔥`;
+
+          const numWsp = configApp.whatsapp || '573505812300';
+          const urlWsp = `https://api.whatsapp.com/send?phone=${numWsp}&text=${encodeURIComponent(msg)}`;
+
+          // Limpiar Carrito y abrir WhatsApp
+          carrito = [];
+          actualizarCarritoUI();
+          cerrarModal('modal-carrito');
+          btn.disabled = false;
+          btn.innerHTML = `<span>Confirmar por WhatsApp</span>`;
+
+          window.location.href = urlWsp;
+        }, 1800);
+      });
+    }
+
+    function cerrarModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
