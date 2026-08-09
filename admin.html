@@ -181,7 +181,11 @@
   <!-- SECCIÓN 3: CIERRE CAJA -->
   <div id="tab-cierre" class="tab-content flex-1 hidden bg-white rounded-2xl p-5 overflow-y-auto max-w-lg mx-auto w-full text-center space-y-4">
     <h2 class="font-bold text-gray-800 text-xl border-b pb-2">Cierre de Caja</h2>
-    <p class="text-sm text-gray-500">Resumen consolidado del turno actual.</p>
+    <div class="bg-gray-50 border p-4 rounded-xl text-left space-y-2 text-sm">
+      <p class="flex justify-between font-bold"><span>Total Ventas Turno:</span><span id="lbl-cierre-total" class="text-emerald-800">$0</span></p>
+      <p class="flex justify-between text-gray-600"><span>Bebidas Vendidas:</span><span id="lbl-cierre-bebidas">$0</span></p>
+      <p class="flex justify-between text-gray-600"><span>Cant. Facturas:</span><span id="lbl-cierre-cant">0</span></p>
+    </div>
     <button onclick="ejecutarCierreCajaScript()" class="bg-red-600 text-white font-bold py-3 px-6 rounded-xl w-full">Generar Arqueo y Guardar en Sheets</button>
   </div>
 
@@ -278,6 +282,7 @@
     let ordenActual = [];
     let metodoPagoSeleccionado = 'Efectivo';
     let comandasEspecialesMemoria = {};
+    let ventasTurnoMemoria = [];
 
     // 1. CARGA Y SINCRONIZACIÓN EN TIEMPO REAL
     db.ref('menu/productos').on('value', snap => {
@@ -291,11 +296,19 @@
       const data = snap.val() || {};
       const mesas = data.mesas || {};
       const pedidosWeb = data.pedidos_pendientes_pos || {};
-      renderizarComandasActivasCombinadas(mesas, pedidosWeb);
+      const cuentasActivas = data.cuentas_activas_pos || {};
+      renderizarComandasActivasCombinadas(mesas, pedidosWeb, cuentasActivas);
     });
 
-    // 2. COMANDAS ACTIVAS (MESAS + WEB)
-    function renderizarComandasActivasCombinadas(mesas, pedidosWeb) {
+    // Escuchar Histórico de Ventas del Turno desde Firebase para Arqueo
+    db.ref('ventas_turno_pos').on('value', snap => {
+      const ventas = snap.val() || {};
+      ventasTurnoMemoria = Object.keys(ventas).map(k => ventas[k]);
+      actualizarResumenCierreUI();
+    });
+
+    // 2. COMANDAS ACTIVAS (MESAS + WEB + CUENTAS POS PERSISTENTES)
+    function renderizarComandasActivasCombinadas(mesas, pedidosWeb, cuentasActivas) {
       const cont = document.getElementById('grid-mesas-pos');
       const sel = document.getElementById('sel-mesa-pos');
       cont.innerHTML = '';
@@ -320,16 +333,20 @@
         sel.innerHTML += `<option value="${k}">🌐 Pedido Web: ${pw.cliente.nombre} ($${pw.total.toLocaleString()})</option>`;
       });
 
-      // Mesas Locales
+      // Mesas Locales (Muestra total acumulado si tiene items guardados)
       Object.keys(mesas).forEach(k => {
         const m = mesas[k];
         totalActivas++;
+        const cuenta = cuentasActivas[k] || { items: [] };
+        const totalMesa = cuenta.items ? cuenta.items.reduce((a,b)=>a+b.precio,0) : 0;
+        comandasEspecialesMemoria[k] = { ...cuenta, esMesa: true, nombreMesa: m.nombre };
+
         cont.innerHTML += `
-          <button onclick="seleccionarComandaActiva('${k}')" class="bg-gray-100 border border-gray-200 font-bold px-3 py-2 rounded-xl text-gray-700 shrink-0">
-            🍽️ ${m.nombre}
+          <button onclick="seleccionarComandaActiva('${k}')" class="bg-gray-100 border ${totalMesa > 0 ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-gray-200 text-gray-700'} font-bold px-3 py-2 rounded-xl shrink-0">
+            🍽️ ${m.nombre} ${totalMesa > 0 ? `<span class="text-[10px] bg-emerald-700 text-white px-1.5 py-0.5 rounded-full ml-1">$${totalMesa.toLocaleString()}</span>` : ''}
           </button>
         `;
-        sel.innerHTML += `<option value="${k}">🍽️ ${m.nombre}</option>`;
+        sel.innerHTML += `<option value="${k}">🍽️ ${m.nombre} ${totalMesa > 0 ? `($${totalMesa.toLocaleString()})` : ''}</option>`;
       });
 
       document.getElementById('badge-total-activas').innerText = totalActivas;
@@ -341,18 +358,41 @@
     }
 
     function cargarDetalleComandaEnCuenta(idKey) {
-      if (comandasEspecialesMemoria[idKey] && comandasEspecialesMemoria[idKey].esWeb) {
-        const pw = comandasEspecialesMemoria[idKey];
-        ordenActual = pw.items || [];
-        document.getElementById('cli-nombre-pos').value = pw.cliente.nombre;
-        document.getElementById('cli-celular-pos').value = pw.cliente.whatsapp;
-        document.getElementById('cli-dir-pos').value = pw.cliente.direccion;
-        document.getElementById('cli-indicaciones-pos').value = pw.nota || '';
-        document.getElementById('sel-tipo-cliente').value = pw.cliente.tipo_entrega === 'domicilio' ? 'domicilio' : 'casual';
-        
-        if (pw.cliente.metodo_pago) setMetodoPagoPos(pw.cliente.metodo_pago);
+      if (idKey === 'sin_mesa') {
+        ordenActual = [];
+        renderizarOrdenUI(false);
+        return;
       }
-      renderizarOrdenUI();
+
+      if (comandasEspecialesMemoria[idKey]) {
+        const c = comandasEspecialesMemoria[idKey];
+        ordenActual = c.items || [];
+        
+        if (c.esWeb) {
+          document.getElementById('cli-nombre-pos').value = c.cliente.nombre || '';
+          document.getElementById('cli-celular-pos').value = c.cliente.whatsapp || '';
+          document.getElementById('cli-dir-pos').value = c.cliente.direccion || '';
+          document.getElementById('cli-indicaciones-pos').value = c.nota || '';
+          document.getElementById('sel-tipo-cliente').value = c.cliente.tipo_entrega === 'domicilio' ? 'domicilio' : 'casual';
+          if (c.cliente.metodo_pago) setMetodoPagoPos(c.cliente.metodo_pago);
+        } else if (c.esMesa) {
+          document.getElementById('cli-nombre-pos').value = c.nombreMesa || '';
+          document.getElementById('cli-indicaciones-pos').value = c.nota || '';
+        }
+      }
+      renderizarOrdenUI(false);
+    }
+
+    // Guardar los items asociados a la mesa activa en Firebase
+    function sincronizarCuentaMesaConFirebase() {
+      const idMesa = document.getElementById('sel-mesa-pos').value;
+      if (idMesa && idMesa !== 'sin_mesa') {
+        const nota = document.getElementById('cli-indicaciones-pos').value;
+        db.ref('cuentas_activas_pos/' + idMesa).set({
+          items: ordenActual,
+          nota: nota || ''
+        });
+      }
     }
 
     // 3. MENÚ POS
@@ -471,18 +511,19 @@
       }
     }
 
-    // 5. ORDEN Y COBRO
+    // 5. ORDEN Y COBRO PERSISTENTE
     function agregarAOrdenPos(nombre, precio, esBebida) {
-      ordenActual.push({ nombre, precio, esBebida });
-      renderizarOrdenUI();
+      ordenActual.push({ nombre, precio, esBebida: (esBebida === true) });
+      renderizarOrdenUI(true);
     }
 
-    function renderizarOrdenUI() {
+    function renderizarOrdenUI(sincronizar = false) {
       const cont = document.getElementById('lista-orden-pos');
       if (ordenActual.length === 0) {
         cont.innerHTML = `<p class="text-center text-gray-400 py-4">Agrega platos de la carta o selecciona un pedido/mesa.</p>`;
         document.getElementById('lbl-total-cuenta').innerText = '$0';
         calcularVueltasPos();
+        if (sincronizar) sincronizarCuentaMesaConFirebase();
         return;
       }
 
@@ -504,11 +545,13 @@
 
       document.getElementById('lbl-total-cuenta').innerText = `$${total.toLocaleString()}`;
       calcularVueltasPos();
+      
+      if (sincronizar) sincronizarCuentaMesaConFirebase();
     }
 
     function eliminarItemOrden(index) {
       ordenActual.splice(index, 1);
-      renderizarOrdenUI();
+      renderizarOrdenUI(true);
     }
 
     function calcularVueltasPos() {
@@ -528,6 +571,11 @@
     }
 
     function limpiarCuentaActual() {
+      const selKey = document.getElementById('sel-mesa-pos').value;
+      if (selKey && selKey !== 'sin_mesa') {
+        db.ref('cuentas_activas_pos/' + selKey).remove();
+      }
+
       ordenActual = [];
       document.getElementById('cli-nombre-pos').value = '';
       document.getElementById('cli-celular-pos').value = '';
@@ -535,7 +583,7 @@
       document.getElementById('cli-indicaciones-pos').value = '';
       document.getElementById('inp-efectivo-recibido').value = '0';
       document.getElementById('sel-mesa-pos').value = 'sin_mesa';
-      renderizarOrdenUI();
+      renderizarOrdenUI(false);
     }
 
     function enviarMandarCocina() {
@@ -558,6 +606,8 @@
 
       if (comandasEspecialesMemoria[selKey] && comandasEspecialesMemoria[selKey].esWeb) {
         db.ref('pedidos_pendientes_pos/' + selKey).remove();
+      } else if (selKey !== 'sin_mesa') {
+        sincronizarCuentaMesaConFirebase();
       }
 
       alert('¡Orden enviada a cocina!');
@@ -573,20 +623,30 @@
       const cliente = document.getElementById('cli-nombre-pos').value || 'Cliente Casual';
       const mesa = document.getElementById('sel-mesa-pos').selectedOptions[0].text;
       const total = ordenActual.reduce((a, b) => a + b.precio, 0);
+      const totalBebidas = ordenActual.filter(x => x.esBebida === true).reduce((a,b) => a + b.precio, 0);
 
       const pedidoData = {
         id: 'PED-' + Date.now().toString().slice(-5),
-        fecha_hora: new Date().toLocaleString(),
-        cliente: { nombre: cliente, tipo_entrega: 'Local' },
+        fecha_hora: new Date().toLocaleString("es-CO"),
+        origen: mesa,
+        cliente: cliente,
         items: ordenActual,
         total: total,
+        total_bebidas: totalBebidas,
         metodo_pago: metodoPagoSeleccionado
       };
 
+      // 1. Guardar Venta en Firebase para Arqueo de Turno
+      db.ref('ventas_turno_pos/' + pedidoData.id).set(pedidoData);
+
+      // 2. Borrar de Cuentas Activas o Pendientes Web
       if (comandasEspecialesMemoria[selKey] && comandasEspecialesMemoria[selKey].esWeb) {
         db.ref('pedidos_pendientes_pos/' + selKey).remove();
+      } else if (selKey !== 'sin_mesa') {
+        db.ref('cuentas_activas_pos/' + selKey).remove();
       }
 
+      // 3. Registrar en Google Sheets
       fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
@@ -599,11 +659,12 @@
           tipo_entrega: 'Local',
           metodo_pago: metodoPagoSeleccionado,
           total_venta: total,
-          total_bebidas: ordenActual.filter(x => x.esBebida).reduce((a,b)=>a+b.precio,0),
+          total_bebidas: totalBebidas,
           items: ordenActual
         })
       });
 
+      // 4. Generar Ticket
       document.getElementById('tick-fecha').innerText = pedidoData.fecha_hora;
       document.getElementById('tick-cliente').innerText = "Cliente: " + cliente;
       document.getElementById('tick-mesa').innerText = "Ubicación: " + mesa;
@@ -619,6 +680,58 @@
       document.getElementById('modal-ticket').classList.remove('hidden');
 
       limpiarCuentaActual();
+    }
+
+    // 6. ARQUEO DE CAJA
+    function actualizarResumenCierreUI() {
+      let totalVentas = 0;
+      let totalBebidas = 0;
+      let cantFacturas = ventasTurnoMemoria.length;
+
+      ventasTurnoMemoria.forEach(v => {
+        totalVentas += v.total || 0;
+        totalBebidas += v.total_bebidas || 0;
+      });
+
+      document.getElementById('lbl-cierre-total').innerText = `$${totalVentas.toLocaleString()}`;
+      document.getElementById('lbl-cierre-bebidas').innerText = `$${totalBebidas.toLocaleString()}`;
+      document.getElementById('lbl-cierre-cant').innerText = cantFacturas;
+    }
+
+    function ejecutarCierreCajaScript() {
+      if (ventasTurnoMemoria.length === 0) {
+        alert('No hay ventas registradas en el turno actual para realizar el cierre.');
+        return;
+      }
+
+      let totalVentas = 0;
+      let totalBebidas = 0;
+
+      ventasTurnoMemoria.forEach(v => {
+        totalVentas += v.total || 0;
+        totalBebidas += v.total_bebidas || 0;
+      });
+
+      if (confirm(`📊 ¿CONFIRMAR CIERRE DE CAJA?\n\n• Total Ventas: $${totalVentas.toLocaleString()}\n• Bebidas Aparte: $${totalBebidas.toLocaleString()}\n• Cantidad Facturas: ${ventasTurnoMemoria.length}`)) {
+        fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accion: 'cerrar_caja',
+            fecha_apertura: new Date().toLocaleString(),
+            base_inicial: 0,
+            total_ventas: totalVentas,
+            total_bebidas: totalBebidas,
+            total_gastos: 0,
+            efectivo_caja_final: totalVentas
+          })
+        });
+
+        // Limpiar turno actual en Firebase
+        db.ref('ventas_turno_pos').remove();
+        alert('¡Cierre de caja guardado con éxito en Google Sheets!');
+      }
     }
 
     function descargarTicketImagen() {
@@ -639,6 +752,7 @@
       const id = document.getElementById('sel-mesa-pos').value;
       if (id !== 'sin_mesa' && confirm('¿Eliminar esta mesa?')) {
         db.ref('mesas/' + id).remove();
+        db.ref('cuentas_activas_pos/' + id).remove();
       }
     }
 
