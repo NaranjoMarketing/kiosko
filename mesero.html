@@ -148,8 +148,11 @@
       const nota = document.getElementById('nota-comanda').value.trim();
       const mesaNombre = document.getElementById('lbl-mesa-activa').innerText;
       const total = comandaActual.reduce((a, b) => a + b.precio, 0);
+      const timestamp = Date.now();
+      const idPedido = 'PED-' + timestamp.toString().slice(-6);
 
-      const comandaData = {
+      // Objeto Comanda para Cocina
+      const comandaCocinaData = {
         origen: mesaNombre,
         hora: new Date().toLocaleTimeString("es-CO", { hour: '2-digit', minute: '2-digit' }),
         items: comandaActual,
@@ -157,10 +160,32 @@
         estado: 'en_preparacion'
       };
 
-      // 1. Enviar a Cocina
-      db.ref('comandas_cocina/COM-' + Date.now()).set(comandaData);
+      // Objeto Pedido para Caja (POS)
+      const pedidoCajaData = {
+        id: idPedido,
+        origen: mesaNombre,
+        fecha_hora: new Date().toLocaleString("es-CO"),
+        cliente: {
+          nombre: mesaNombre,
+          whatsapp: 'N/A',
+          tipo_entrega: 'Local',
+          direccion: 'Mesa Local',
+          metodo_pago: 'Efectivo'
+        },
+        items: comandaActual,
+        costo_recargo: 0,
+        total: total,
+        nota: nota || 'Sin notas',
+        estado: 'pendiente_aprobacion'
+      };
 
-      alert('¡Comanda enviada a Cocina!');
+      // 1. Enviar a Cocina
+      db.ref('comandas_cocina/COM-' + timestamp).set(comandaCocinaData);
+
+      // 2. Enviar a Caja (POS)
+      db.ref('pedidos_pendientes_pos/' + idPedido).set(pedidoCajaData);
+
+      alert('¡Comanda enviada exitosamente a Cocina y Caja!');
       comandaActual = [];
       document.getElementById('nota-comanda').value = '';
       actualizarComandaUI();
