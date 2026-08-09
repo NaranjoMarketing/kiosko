@@ -327,7 +327,7 @@
         nombre: nombre,
         precio: precio,
         cantidad: 1,
-        esBebida: esBebida
+        esBebida: (esBebida === true)
       };
       carrito.push(item);
       actualizarCarritoUI();
@@ -407,8 +407,8 @@
     function calcularTotalesCheckout() {
       let subtotal = carrito.reduce((acc, i) => acc + i.precio, 0);
       
-      // FILTRAR SOLO COMIDA PARA EMPAQUE (LAS BEBIDAS NO LLEVAN EMPAQUE DE $2.000)
-      let itemsComida = carrito.filter(i => !i.esBebida);
+      // FILTRAR ESTRICTAMENTE SOLO COMIDA PARA APLICAR EL EMPAQUE ($2.000)
+      let itemsComida = carrito.filter(i => i.esBebida !== true);
       let costoEmpaque = itemsComida.length * 2000; 
       
       let recargo = 0;
