@@ -145,7 +145,7 @@
         <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Tipo de Entrega</label>
         <div class="grid grid-cols-2 gap-2">
           <button type="button" onclick="setTipoEntrega('domicilio', this)" class="btn-entrega bg-kiosko-red border border-kiosko-red p-2 rounded-lg text-sm text-center font-semibold">Domicilio (+$4.000 + Empaque)</button>
-          <button type="button" onclick="setTipoEntrega('recoger', this)" class="btn-entrega bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">Recoger en Local (+$2.000/empaque)</button>
+          <button type="button" onclick="setTipoEntrega('recoger', this)" class="btn-entrega bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">Recoger en Local (+$2.000/empaque comida)</button>
         </div>
       </div>
 
@@ -406,16 +406,20 @@
 
     function calcularTotalesCheckout() {
       let subtotal = carrito.reduce((acc, i) => acc + i.precio, 0);
-      let costoEmpaque = carrito.length * 2000; // $2.000 por empaque por unidad
+      
+      // FILTRAR SOLO COMIDA PARA EMPAQUE (LAS BEBIDAS NO LLEVAN EMPAQUE DE $2.000)
+      let itemsComida = carrito.filter(i => !i.esBebida);
+      let costoEmpaque = itemsComida.length * 2000; 
+      
       let recargo = 0;
 
       if (tipoEntrega === 'domicilio') {
         let costoDomicilioFijo = 4000;
-        recargo = costoDomicilioFijo + costoEmpaque; // Se suma Domicilio ($4.000) + Empaque ($2.000 x prod)
-        document.getElementById('lbl-recargo').innerText = `Domicilio + Empaque (${carrito.length} prod):`;
+        recargo = costoDomicilioFijo + costoEmpaque; // Domicilio ($4.000) + Empaque solo comida ($2.000 x prod)
+        document.getElementById('lbl-recargo').innerText = `Domicilio + Empaque (${itemsComida.length} comida):`;
       } else {
         recargo = costoEmpaque;
-        document.getElementById('lbl-recargo').innerText = `Empaque (${carrito.length} prod):`;
+        document.getElementById('lbl-recargo').innerText = `Empaque (${itemsComida.length} comida):`;
       }
 
       let total = subtotal + recargo;
