@@ -144,7 +144,7 @@
       <div class="pt-2">
         <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Tipo de Entrega</label>
         <div class="grid grid-cols-2 gap-2">
-          <button type="button" onclick="setTipoEntrega('domicilio', this)" class="btn-entrega bg-kiosko-red border border-kiosko-red p-2 rounded-lg text-sm text-center font-semibold">Domicilio (+$4.000)</button>
+          <button type="button" onclick="setTipoEntrega('domicilio', this)" class="btn-entrega bg-kiosko-red border border-kiosko-red p-2 rounded-lg text-sm text-center font-semibold">Domicilio (+$4.000 + Empaque)</button>
           <button type="button" onclick="setTipoEntrega('recoger', this)" class="btn-entrega bg-zinc-800 border border-zinc-700 p-2 rounded-lg text-sm text-center font-semibold">Recoger en Local (+$2.000/empaque)</button>
         </div>
       </div>
@@ -178,7 +178,7 @@
       <!-- Resumen de Costos final -->
       <div class="border-t border-zinc-800 pt-3 space-y-1 text-sm">
         <div class="flex justify-between text-gray-400"><span>Subtotal productos:</span><span id="res-subtotal">$0</span></div>
-        <div class="flex justify-between text-gray-400"><span id="lbl-recargo">Domicilio:</span><span id="res-recargo">$4.000</span></div>
+        <div class="flex justify-between text-gray-400"><span id="lbl-recargo">Domicilio + Empaque:</span><span id="res-recargo">$0</span></div>
         <div class="flex justify-between text-lg font-bold text-white pt-1"><span>Total a Pagar:</span><span id="res-total" class="text-kiosko-red">$0</span></div>
       </div>
 
@@ -279,11 +279,15 @@
       Object.keys(productos).forEach(key => {
         const p = productos[key];
         if (p.es_bebida) {
+          const imgHtml = p.imagen ? `<img src="${p.imagen}" class="w-12 h-12 object-cover rounded-lg mr-3">` : '';
           cont.innerHTML += `
             <div class="flex justify-between items-center bg-zinc-800 p-3 rounded-xl">
-              <div>
-                <p class="font-bold text-white text-sm">${p.nombre}</p>
-                <p class="text-xs text-kiosko-red font-bold">$${p.precio_base.toLocaleString()}</p>
+              <div class="flex items-center">
+                ${imgHtml}
+                <div>
+                  <p class="font-bold text-white text-sm">${p.nombre}</p>
+                  <p class="text-xs text-kiosko-red font-bold">$${p.precio_base.toLocaleString()}</p>
+                </div>
               </div>
               <button onclick="agregarProductoGenerico('${p.nombre}', ${p.precio_base}, true)" class="bg-kiosko-red text-white font-bold px-3 py-1 rounded-lg text-sm">+ Agregar</button>
             </div>
@@ -299,12 +303,16 @@
       Object.keys(productos).forEach(key => {
         const p = productos[key];
         if (!p.es_bebida && !p.es_carne_barril) {
+          const imgHtml = p.imagen ? `<img src="${p.imagen}" class="w-16 h-16 object-cover rounded-lg mr-3">` : '';
           cont.innerHTML += `
             <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex justify-between items-center">
-              <div>
-                <h4 class="font-bold text-white">${p.nombre}</h4>
-                <p class="text-xs text-gray-400">${p.descripcion || ''}</p>
-                <span class="text-kiosko-red font-bold text-sm">$${p.precio_base.toLocaleString()}</span>
+              <div class="flex items-center">
+                ${imgHtml}
+                <div>
+                  <h4 class="font-bold text-white">${p.nombre}</h4>
+                  <p class="text-xs text-gray-400">${p.descripcion || ''}</p>
+                  <span class="text-kiosko-red font-bold text-sm">$${p.precio_base.toLocaleString()}</span>
+                </div>
               </div>
               <button onclick="agregarProductoGenerico('${p.nombre}', ${p.precio_base}, false)" class="bg-kiosko-red text-white font-bold px-3 py-2 rounded-lg text-xs">+ Agregar</button>
             </div>
@@ -398,13 +406,15 @@
 
     function calcularTotalesCheckout() {
       let subtotal = carrito.reduce((acc, i) => acc + i.precio, 0);
+      let costoEmpaque = carrito.length * 2000; // $2.000 por empaque por unidad
       let recargo = 0;
 
       if (tipoEntrega === 'domicilio') {
-        recargo = 4000;
-        document.getElementById('lbl-recargo').innerText = "Costo Domicilio:";
+        let costoDomicilioFijo = 4000;
+        recargo = costoDomicilioFijo + costoEmpaque; // Se suma Domicilio ($4.000) + Empaque ($2.000 x prod)
+        document.getElementById('lbl-recargo').innerText = `Domicilio + Empaque (${carrito.length} prod):`;
       } else {
-        recargo = carrito.length * 2000; // $2.000 por empaque por unidad
+        recargo = costoEmpaque;
         document.getElementById('lbl-recargo').innerText = `Empaque (${carrito.length} prod):`;
       }
 
@@ -493,7 +503,7 @@
 
           msg += `----------------------------------\n`;
           msg += `*Subtotal:* $${subtotal.toLocaleString()}\n`;
-          msg += `*${tipoEntrega === 'domicilio' ? 'Domicilio' : 'Empaque'}:* $${recargo.toLocaleString()}\n`;
+          msg += `*${tipoEntrega === 'domicilio' ? 'Domicilio + Empaque' : 'Empaque'}:* $${recargo.toLocaleString()}\n`;
           msg += `💰 *TOTAL A PAGAR:* $${total.toLocaleString()}\n`;
           msg += `----------------------------------\n`;
           msg += `💳 *Método de Pago:* ${metodoPago}\n`;
